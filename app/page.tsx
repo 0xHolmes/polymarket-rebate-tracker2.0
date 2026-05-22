@@ -56,7 +56,7 @@ export default function Home() {
           Track your <span className="italic" style={{ color: "#E5B649" }}>rebate</span> in real time.
         </h1>
         <p className="text-zinc-400 mt-6 max-w-xl leading-relaxed">
-          The Taker Rebate Program is live on Polymarket starting Thursday, May 29, 2026. Enter any wallet address to see its 30-day Weighted Volume, current tier, and how far it is from the next.
+          The Taker Rebate Program goes live on Polymarket Thursday, May 29, 2026. Paste any wallet to see its 30-day Weighted Volume, current tier, and how far it is from the next.
         </p>
       </header>
 
@@ -83,20 +83,29 @@ export default function Home() {
           <TradesList trades={rebates.recentTrades} />
 
           <a href={`https://www.betmoar.fun/poly-fees/${rebates.address}`} target="_blank" rel="noopener noreferrer" className="block bg-ink-800 border border-ink-600 hover:border-accent rounded-xl p-5 transition-colors group">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-zinc-500 mb-1">Want your fee receipt?</p>
-                <p className="text-zinc-200 group-hover:text-accent transition-colors">View total fees paid on Betmoar →</p>
+                <p className="text-xs uppercase tracking-[0.2em] text-zinc-500 mb-1">Curious about lifetime fees paid?</p>
+                <p className="text-zinc-200 group-hover:text-accent transition-colors">View this wallet's fee receipt on Betmoar →</p>
+                <p className="text-xs text-zinc-600 mt-1">Betmoar reads on-chain FeeRefunded events directly — the most accurate source.</p>
               </div>
-              <span className="text-zinc-600 group-hover:text-accent transition-colors font-mono text-sm">betmoar.fun</span>
+              <span className="text-zinc-600 group-hover:text-accent transition-colors font-mono text-xs whitespace-nowrap">betmoar.fun</span>
             </div>
           </a>
         </div>
       )}
 
-      <footer className="mt-20 pt-8 border-t border-ink-700 text-xs text-zinc-600 flex flex-wrap justify-between gap-3">
-        <p>Reads from <a href="https://docs.polymarket.com/api-reference/core/get-trades-for-a-user-or-markets" target="_blank" rel="noopener noreferrer" className="hover:text-zinc-400 underline underline-offset-2">data-api.polymarket.com</a> and <a href="https://gamma-api.polymarket.com" target="_blank" rel="noopener noreferrer" className="hover:text-zinc-400 underline underline-offset-2">gamma-api.polymarket.com</a>. No data is stored.</p>
-        <p><a href="https://docs.polymarket.com/trading/taker-rebates" target="_blank" rel="noopener noreferrer" className="hover:text-zinc-400 underline underline-offset-2">Program docs ↗</a></p>
+      <footer className="mt-20 pt-8 border-t border-ink-700 text-xs text-zinc-600 space-y-3">
+        <p>
+          Rebate data from <a href="https://docs.polymarket.com/api-reference/core/get-trades-for-a-user-or-markets" target="_blank" rel="noopener noreferrer" className="hover:text-zinc-400 underline underline-offset-2">data-api.polymarket.com</a> and <a href="https://gamma-api.polymarket.com" target="_blank" rel="noopener noreferrer" className="hover:text-zinc-400 underline underline-offset-2">gamma-api.polymarket.com</a>. Nothing is stored.
+        </p>
+        <p>
+          Fee receipts powered by <a href="https://www.betmoar.fun" target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-accent underline underline-offset-2">Betmoar</a> — the #1 Polymarket terminal. Built by traders, for traders.
+        </p>
+        <p className="flex flex-wrap justify-between gap-3 pt-2">
+          <span><a href="https://docs.polymarket.com/trading/taker-rebates" target="_blank" rel="noopener noreferrer" className="hover:text-zinc-400 underline underline-offset-2">Program docs ↗</a></span>
+          <span>Not affiliated with Polymarket or Betmoar.</span>
+        </p>
       </footer>
     </main>
   );
