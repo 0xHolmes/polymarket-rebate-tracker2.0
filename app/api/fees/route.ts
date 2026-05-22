@@ -1,28 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchAllTakerTrades, fetchMarketsByConditionIds, tagsForMarket } from "@/lib/polymarket";
-import { categoryFromTags, CATEGORY_FEE_RATE, type Category } from "@/lib/categories";
+import { fetchFeeRatesForTokens } from "@/lib/clob";
+import { categoryFromTags, type Category } from "@/lib/categories";
 import { TIERS } from "@/lib/tiers";
 
 export const runtime = "nodejs";
 export const revalidate = 60;
+export const maxDuration = 60;
 
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
-
-// When taker fees went live on Polymarket, per category.
-// Trades before these dates paid $0 in fees regardless of category.
-const FEE_START_DATE_SEC: Record<Category, number> = {
-  Crypto:      Math.floor(new Date("2026-01-05T00:00:00Z").getTime() / 1000),
-  Sports:      Math.floor(new Date("2026-02-18T00:00:00Z").getTime() / 1000),
-  Politics:    Math.floor(new Date("2026-03-30T00:00:00Z").getTime() / 1000),
-  Finance:     Math.floor(new Date("2026-03-30T00:00:00Z").getTime() / 1000),
-  Mentions:    Math.floor(new Date("2026-03-30T00:00:00Z").getTime() / 1000),
-  Tech:        Math.floor(new Date("2026-03-30T00:00:00Z").getTime() / 1000),
-  Economics:   Math.floor(new Date("2026-03-30T00:00:00Z").getTime() / 1000),
-  Culture:     Math.floor(new Date("2026-03-30T00:00:00Z").getTime() / 1000),
-  Weather:     Math.floor(new Date("2026-03-30T00:00:00Z").getTime() / 1000),
-  Other:       Math.floor(new Date("2026-03-30T00:00:00Z").getTime() / 1000),
-  Geopolitics: Number.MAX_SAFE_INTEGER,
-};
 
 export interface FeesResponse {
   address: string;
@@ -52,8 +38,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: `Polymarket fetch failed: ${msg}` }, { status: 502 });
   }
 
+  // Pull in parallel: market metadata (for category labels) AND per-token
+  // fee rates (the authoritative source matching what Polymarket charges).
   const conditionIds = trades.map((t) => t.conditionId).filter(Boolean);
-  const markets = await fetchMarketsByConditionIds(conditionIds);
+  const tokenIds = trades.map((t) => t.asset).filter(Boolean);
+  const [markets, feeRates] = await Promise.all([
+    fetchMarketsByConditionIds(conditionIds),
+    fetchFeeRatesForTokens(tokenIds),
+  ]);
 
   let totalFeesPaid = 0;
   let totalFeeVolume = 0;
@@ -69,21 +61,18 @@ export async function GET(req: NextRequest) {
     const category = categoryFromTags(tags);
     const notional = t.size * t.price;
 
-    // Determine actual fee paid. Priority:
-    //   1. fee_rate_bps on the trade itself (most accurate, post-rollout)
-    //   2. feesEnabled=true AND timestamp >= category fee-start date
-    //   3. Otherwise: zero fee
-    let feeRate = 0;
-    const reportedBps = t.fee_rate_bps == null ? null : Number(t.fee_rate_bps);
-    if (reportedBps != null && !Number.isNaN(reportedBps) && reportedBps > 0) {
-      feeRate = reportedBps / 10000;
-    } else if (
-      market?.feesEnabled === true &&
-      t.timestamp >= FEE_START_DATE_SEC[category] &&
-      CATEGORY_FEE_RATE[category] > 0
-    ) {
-      feeRate = CATEGORY_FEE_RATE[category];
+    // Authoritative fee rate. Priority:
+    //   1. fee_rate_bps emitted on the trade itself (cleanest)
+    //   2. Per-token rate from CLOB /fee-rate endpoint
+    //   3. Zero
+    let feeRateBps = 0;
+    const reportedBps = t.fee_rate_bps == null ? 0 : Number(t.fee_rate_bps);
+    if (reportedBps > 0 && Number.isFinite(reportedBps)) {
+      feeRateBps = reportedBps;
+    } else {
+      feeRateBps = feeRates.get(t.asset) ?? 0;
     }
+    const feeRate = feeRateBps / 10000;
 
     const fee = t.size * feeRate * t.price * (1 - t.price);
     if (fee > 0) {
@@ -92,10 +81,11 @@ export async function GET(req: NextRequest) {
       feePayingTrades += 1;
     }
 
-    const c = categoryAgg.get(category) ?? { fees: 0, volume: 0, trades: 0, rate: CATEGORY_FEE_RATE[category] };
+    const c = categoryAgg.get(category) ?? { fees: 0, volume: 0, trades: 0, rate: feeRate };
     c.fees += fee;
     c.volume += notional;
     c.trades += 1;
+    if (feeRate > c.rate) c.rate = feeRate;
     categoryAgg.set(category, c);
 
     if (t.timestamp >= thirtyDaysAgo) {
