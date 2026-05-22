@@ -1,11 +1,9 @@
 // CLOB endpoint client — fetches per-market fee rates.
-// This is the same source Polymarket uses to charge fees at match time,
-// so it gives exact-cent accuracy matching betmoar.fun / on-chain data.
+// This is the authoritative source Polymarket uses at match time.
 
 const CLOB_API = "https://clob.polymarket.com";
 
-// In-memory cache, keyed by token_id (asset). The fee rate for a given
-// token is fixed for the market's lifetime, so caching is safe.
+// In-memory cache keyed by token_id. Fee rates are fixed per market.
 const feeRateCache = new Map<string, number>();
 
 async function fetchFeeRateBps(tokenId: string): Promise<number> {
@@ -19,9 +17,14 @@ async function fetchFeeRateBps(tokenId: string): Promise<number> {
       feeRateCache.set(tokenId, 0);
       return 0;
     }
-    const json = (await res.json()) as { fee_rate_bps?: number | string };
-    const bps = Number(json?.fee_rate_bps ?? 0);
-    const safe = Number.isFinite(bps) ? bps : 0;
+    // IMPORTANT: the response field is `base_fee` (in basis points),
+    // NOT `fee_rate_bps` as some docs pages suggest. Verified against
+    // production: GET /fee-rate?token_id=... → {"base_fee": 1000}
+    // We also accept fee_rate_bps as a fallback for safety.
+    const json = (await res.json()) as { base_fee?: number | string; fee_rate_bps?: number | string };
+    const raw = json?.base_fee ?? json?.fee_rate_bps ?? 0;
+    const bps = Number(raw);
+    const safe = Number.isFinite(bps) && bps >= 0 ? bps : 0;
     feeRateCache.set(tokenId, safe);
     return safe;
   } catch {
