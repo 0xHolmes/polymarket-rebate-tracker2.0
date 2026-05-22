@@ -64,7 +64,7 @@ export function FeesCard({ data, currentTierId }: Props) {
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-zinc-500 mb-2">Total fees paid</p>
             <p className="font-display text-6xl sm:text-7xl font-light leading-none text-zinc-100">{fmtUsdExact(data.totalFeesPaid)}</p>
-            <p className="text-zinc-500 text-sm mt-3 font-mono">across {data.totalTrades.toLocaleString()} taker trades</p>
+            <p className="text-zinc-500 text-sm mt-3 font-mono">across {data.totalTrades.toLocaleString()} taker trades · {data.feePayingTrades.toLocaleString()} paid fees</p>
           </div>
 
           {hasFees && (
