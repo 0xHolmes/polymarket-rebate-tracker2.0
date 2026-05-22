@@ -6,14 +6,11 @@ import { TierCard } from "@/components/TierCard";
 import { StatsGrid } from "@/components/StatsGrid";
 import { CategoryBreakdown } from "@/components/CategoryBreakdown";
 import { TradesList } from "@/components/TradesList";
-import { FeesCard } from "@/components/FeesCard";
 import type { RebateResponse } from "@/app/api/rebates/route";
-import type { FeesResponse } from "@/app/api/fees/route";
 
 export default function Home() {
   const [address, setAddress] = useState<string>("");
   const [rebates, setRebates] = useState<RebateResponse | null>(null);
-  const [fees, setFees] = useState<FeesResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,18 +27,11 @@ export default function Home() {
     setLoading(true);
     setError(null);
     setRebates(null);
-    setFees(null);
     try {
-      const [rebatesRes, feesRes] = await Promise.all([
-        fetch(`/api/rebates?address=${addr}`),
-        fetch(`/api/fees?address=${addr}`),
-      ]);
-      const rebatesJson = await rebatesRes.json();
-      const feesJson = await feesRes.json();
-      if (!rebatesRes.ok) throw new Error(rebatesJson.error ?? "Rebates fetch failed");
-      if (!feesRes.ok) throw new Error(feesJson.error ?? "Fees fetch failed");
-      setRebates(rebatesJson as RebateResponse);
-      setFees(feesJson as FeesResponse);
+      const res = await fetch(`/api/rebates?address=${addr}`);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Request failed");
+      setRebates(json as RebateResponse);
       window.location.hash = addr;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
@@ -66,7 +56,7 @@ export default function Home() {
           Track your <span className="italic" style={{ color: "#E5B649" }}>rebate</span> in real time.
         </h1>
         <p className="text-zinc-400 mt-6 max-w-xl leading-relaxed">
-          The Taker Rebate Program is live on Polymarket starting Thursday, May 29, 2026. Enter any wallet address to see its 30-day Weighted Volume, current tier, lifetime fees, and projected refunds.
+          The Taker Rebate Program is live on Polymarket starting Thursday, May 29, 2026. Enter any wallet address to see its 30-day Weighted Volume, current tier, and how far it is from the next.
         </p>
       </header>
 
@@ -82,7 +72,6 @@ export default function Home() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {[0, 1, 2, 3].map((i) => (<div key={i} className="h-24 bg-ink-800 border border-ink-600 rounded-xl animate-pulse" />))}
           </div>
-          <div className="h-64 bg-ink-800 border border-ink-600 rounded-2xl animate-pulse" />
         </div>
       )}
 
@@ -90,9 +79,18 @@ export default function Home() {
         <div className="space-y-6 animate-fade-up">
           <TierCard current={rebates.tier.current} next={rebates.tier.next} pct={rebates.tier.pct} remaining={rebates.tier.remaining} totalWeightedVolume={rebates.totalWeightedVolume} />
           <StatsGrid totalTrades={rebates.totalTrades} totalNotionalUsd={rebates.totalNotionalUsd} current={rebates.tier.current} next={rebates.tier.next} />
-          {fees && <FeesCard data={fees} currentTierId={rebates.tier.current.id} />}
           <CategoryBreakdown byCategory={rebates.byCategory} totalWeightedVolume={rebates.totalWeightedVolume} />
           <TradesList trades={rebates.recentTrades} />
+
+          <a href={`https://www.betmoar.fun/poly-fees/${rebates.address}`} target="_blank" rel="noopener noreferrer" className="block bg-ink-800 border border-ink-600 hover:border-accent rounded-xl p-5 transition-colors group">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-zinc-500 mb-1">Want your fee receipt?</p>
+                <p className="text-zinc-200 group-hover:text-accent transition-colors">View total fees paid on Betmoar →</p>
+              </div>
+              <span className="text-zinc-600 group-hover:text-accent transition-colors font-mono text-sm">betmoar.fun</span>
+            </div>
+          </a>
         </div>
       )}
 
