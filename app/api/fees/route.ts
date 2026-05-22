@@ -8,6 +8,22 @@ export const revalidate = 60;
 
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 
+// When taker fees went live on Polymarket, per category.
+// Trades before these dates paid $0 in fees regardless of category.
+const FEE_START_DATE_SEC: Record<Category, number> = {
+  Crypto:      Math.floor(new Date("2026-01-05T00:00:00Z").getTime() / 1000),
+  Sports:      Math.floor(new Date("2026-02-18T00:00:00Z").getTime() / 1000),
+  Politics:    Math.floor(new Date("2026-03-30T00:00:00Z").getTime() / 1000),
+  Finance:     Math.floor(new Date("2026-03-30T00:00:00Z").getTime() / 1000),
+  Mentions:    Math.floor(new Date("2026-03-30T00:00:00Z").getTime() / 1000),
+  Tech:        Math.floor(new Date("2026-03-30T00:00:00Z").getTime() / 1000),
+  Economics:   Math.floor(new Date("2026-03-30T00:00:00Z").getTime() / 1000),
+  Culture:     Math.floor(new Date("2026-03-30T00:00:00Z").getTime() / 1000),
+  Weather:     Math.floor(new Date("2026-03-30T00:00:00Z").getTime() / 1000),
+  Other:       Math.floor(new Date("2026-03-30T00:00:00Z").getTime() / 1000),
+  Geopolitics: Number.MAX_SAFE_INTEGER,
+};
+
 export interface FeesResponse {
   address: string;
   totalTrades: number;
@@ -16,6 +32,7 @@ export interface FeesResponse {
   avgFee: number;
   effectiveFeeRate: number;
   truncated: boolean;
+  feePayingTrades: number;
   byCategory: Array<{ category: Category; fees: number; volume: number; trades: number; rate: number }>;
   potentialRebates: Array<{ tierId: number; name: string; hex: string; rebate: number; refund: number }>;
   dailySeries: Array<{ date: string; fees: number; trades: number }>;
@@ -40,22 +57,42 @@ export async function GET(req: NextRequest) {
 
   let totalFeesPaid = 0;
   let totalFeeVolume = 0;
+  let feePayingTrades = 0;
   const categoryAgg = new Map<Category, { fees: number; volume: number; trades: number; rate: number }>();
   const dailyMap = new Map<string, { fees: number; trades: number }>();
   const nowSec = Math.floor(Date.now() / 1000);
   const thirtyDaysAgo = nowSec - 30 * 24 * 60 * 60;
 
   for (const t of trades) {
-    const tags = tagsForMarket(markets.get(t.conditionId));
+    const market = markets.get(t.conditionId);
+    const tags = tagsForMarket(market);
     const category = categoryFromTags(tags);
-    const feeRate = CATEGORY_FEE_RATE[category];
     const notional = t.size * t.price;
+
+    // Determine actual fee paid. Priority:
+    //   1. fee_rate_bps on the trade itself (most accurate, post-rollout)
+    //   2. feesEnabled=true AND timestamp >= category fee-start date
+    //   3. Otherwise: zero fee
+    let feeRate = 0;
+    const reportedBps = t.fee_rate_bps == null ? null : Number(t.fee_rate_bps);
+    if (reportedBps != null && !Number.isNaN(reportedBps) && reportedBps > 0) {
+      feeRate = reportedBps / 10000;
+    } else if (
+      market?.feesEnabled === true &&
+      t.timestamp >= FEE_START_DATE_SEC[category] &&
+      CATEGORY_FEE_RATE[category] > 0
+    ) {
+      feeRate = CATEGORY_FEE_RATE[category];
+    }
+
     const fee = t.size * feeRate * t.price * (1 - t.price);
+    if (fee > 0) {
+      totalFeesPaid += fee;
+      totalFeeVolume += notional;
+      feePayingTrades += 1;
+    }
 
-    totalFeesPaid += fee;
-    if (feeRate > 0) totalFeeVolume += notional;
-
-    const c = categoryAgg.get(category) ?? { fees: 0, volume: 0, trades: 0, rate: feeRate };
+    const c = categoryAgg.get(category) ?? { fees: 0, volume: 0, trades: 0, rate: CATEGORY_FEE_RATE[category] };
     c.fees += fee;
     c.volume += notional;
     c.trades += 1;
@@ -94,9 +131,10 @@ export async function GET(req: NextRequest) {
     totalTrades: trades.length,
     totalFeesPaid,
     totalFeeVolume,
-    avgFee: trades.length > 0 ? totalFeesPaid / trades.length : 0,
+    avgFee: feePayingTrades > 0 ? totalFeesPaid / feePayingTrades : 0,
     effectiveFeeRate: totalFeeVolume > 0 ? totalFeesPaid / totalFeeVolume : 0,
     truncated,
+    feePayingTrades,
     byCategory,
     potentialRebates,
     dailySeries,
