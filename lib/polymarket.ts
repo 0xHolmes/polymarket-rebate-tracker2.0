@@ -1,3 +1,8 @@
+// Thin client around Polymarket's public Data API and Gamma API.
+//
+//   Data API : https://data-api.polymarket.com  (trades, positions, activity)
+//   Gamma API: https://gamma-api.polymarket.com (markets, events, tags)
+
 const DATA_API = "https://data-api.polymarket.com";
 const GAMMA_API = "https://gamma-api.polymarket.com";
 
@@ -16,12 +21,16 @@ export interface RawTrade {
   outcome: string;
   outcomeIndex: number;
   transactionHash: string;
+  // Present on post-fee-rollout trades. Basis points; absent => 0.
+  fee_rate_bps?: string | number;
 }
 
 export interface GammaMarketLite {
   conditionId: string;
   slug: string;
   question: string;
+  // Authoritative signal: if false, this market has never charged fees.
+  feesEnabled?: boolean;
   events?: Array<{
     slug: string;
     title: string;
